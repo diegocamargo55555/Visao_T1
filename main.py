@@ -2,14 +2,13 @@ import cv2
 from panoramica import criar_panoramica
 
 def menu_interativo():
-    caminho_img1 = 'imgR.png'
-    caminho_img2 = 'imgL.png'
+    imgL = 'imgL.png'
+    imgR = 'imgR.png'
 
-    print("Carregando imagens base...")
-    imagem1 = cv2.imread(caminho_img1)
-    imagem2 = cv2.imread(caminho_img2)
+    imgL = cv2.imread(imgL)
+    imgR = cv2.imread(imgR)
 
-    if imagem1 is None or imagem2 is None:
+    if imgL is None or imgR is None:
         print(f"Erro ao carregar as imagens")
         return
 
@@ -46,7 +45,7 @@ def menu_interativo():
 
         print(f"\nProcessando panorâmica com {detector_tipo.upper()} + {matcher_tipo.upper()}...")
         
-        panoramica, tempo = criar_panoramica(imagem1, imagem2, detector_tipo, matcher_tipo)
+        panoramica, tempo = criar_panoramica(imgL, imgR, detector_tipo, matcher_tipo)
 
         if panoramica is not None:
             print(f"Sucesso! Tempo de processamento: {tempo:.4f} segundos")
