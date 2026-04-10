@@ -18,24 +18,24 @@ class AppPanorama:
             janela_principal, 
             text="Selecione as Imagens", 
             font=("Arial", 12, "bold")
-        ).pack(pady=10)
+        ).pack(pady=20)
 
         tk.Button(
             janela_principal, 
             text="Selecionar Imagem Esquerda", 
             command=lambda: self.selecionar_imagem(0),
             width=30
-        ).pack(pady=5)
+        ).pack(pady=10)
 
         tk.Button(
             janela_principal, 
             text="Selecionar Imagem Direita", 
             command=lambda: self.selecionar_imagem(1),
             width=30
-        ).pack(pady=5)
+        ).pack(pady=10)
 
         self.label_status = tk.Label(janela_principal, text="Nenhuma imagem selecionada", fg="gray")
-        self.label_status.pack(pady=10)
+        self.label_status.pack(pady=15)
 
         tk.Button(
             janela_principal, 
@@ -45,7 +45,7 @@ class AppPanorama:
             font=("Arial", 10, "bold"), 
             command=self.executar_processamento,
             width=30
-        ).pack(pady=15)
+        ).pack(pady=20)
 
     def selecionar_imagem(self, indice):
         caminho = filedialog.askopenfilename(title="Escolha a imagem")
@@ -55,13 +55,19 @@ class AppPanorama:
             nome_dir = os.path.basename(self.caminhos_imagens[1]) if self.caminhos_imagens[1] else "..."
             self.label_status.config(text=f"Esq: {nome_esq} | Dir: {nome_dir}", fg="black")
 
-    def preparar_imagem_final(self, lista_resultados):
+    def preparar_imagem_final(self, lista_resultados, espacamento=50):
         largura_maxima = max(img.shape[1] for img in lista_resultados)
         imagens_ajustadas = []
-        for img in lista_resultados:
+        for i, img in enumerate(lista_resultados):
             pad_largura = largura_maxima - img.shape[1]
             img_pad = np.pad(img, ((0, 0), (0, pad_largura), (0, 0)), mode='constant')
             imagens_ajustadas.append(img_pad)
+            
+            # Adiciona um espaço preto entre as imagens, exceto após a última
+            if i < len(lista_resultados) - 1:
+                espaco_vazio = np.zeros((espacamento, largura_maxima, 3), dtype=np.uint8)
+                imagens_ajustadas.append(espaco_vazio)
+                
         return np.vstack(imagens_ajustadas)
 
     def mostrar_resultado(self, imagem_bgr, tempo_total, resumo_tempos):
@@ -92,7 +98,7 @@ class AppPanorama:
         imagem_tk = ImageTk.PhotoImage(imagem_pil)
         label_imagem = tk.Label(janela_res, image=imagem_tk)
         label_imagem.image = imagem_tk
-        label_imagem.pack(padx=10, pady=10)
+        label_imagem.pack(padx=20, pady=20)
 
     def executar_processamento(self):
         if not all(self.caminhos_imagens):
