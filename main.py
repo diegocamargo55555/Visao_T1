@@ -1,66 +1,146 @@
 import cv2
-from panoramica import criar_panoramica
+import numpy as np
+import os
+import time
+import tkinter as tk
+from tkinter import filedialog, messagebox
+from PIL import Image, ImageTk
 
-def menu_interativo():
-    imgL = 'imgL.png'
-    imgR = 'imgR.png'
+from processamento import gerar_panorama
 
-    imgL = cv2.imread(imgL)
-    imgR = cv2.imread(imgR)
+class AppPanorama:
+    def __init__(self, janela_principal):
+        self.janela = janela_principal
+        self.janela.title("Gerador de Panorama")
+        self.caminhos_imagens = [None, None]
 
-    if imgL is None or imgR is None:
-        print(f"Erro ao carregar as imagens")
-        return
+        tk.Label(
+            janela_principal, 
+            text="Selecione as Imagens", 
+            font=("Arial", 12, "bold")
+        ).pack(pady=10)
 
-    while True:
-        print("\n" + "="*50)
-        print(" MENU DE PANORÂMICA (Interface Interativa) ")
-        print("="*50)
-        print("Selecione a combinação de algoritmos:")
-        print("1. ORB e BF")
-        print("2. ORB e FLANN")
-        print("3. SIFT e BF")
-        print("4. SIFT e FLANN")
-        print("0. Sair")
-        print("="*50)
+        tk.Button(
+            janela_principal, 
+            text="Selecionar Imagem Esquerda", 
+            command=lambda: self.selecionar_imagem(0),
+            width=30
+        ).pack(pady=5)
 
-        opcao = input("Digite a sua opção: ")
+        tk.Button(
+            janela_principal, 
+            text="Selecionar Imagem Direita", 
+            command=lambda: self.selecionar_imagem(1),
+            width=30
+        ).pack(pady=5)
 
-        if opcao == '0':
-            print("Encerrando o programa...")
-            break
-            
-        opcoes_map = {
-            '1': ('orb', 'bf'),
-            '2': ('orb', 'flann'),
-            '3': ('sift', 'bf'),
-            '4': ('sift', 'flann')
-        }
+        self.label_status = tk.Label(janela_principal, text="Nenhuma imagem selecionada", fg="gray")
+        self.label_status.pack(pady=10)
 
-        if opcao not in opcoes_map:
-            print("Opção inválida! Tente novamente.")
-            continue
+        tk.Button(
+            janela_principal, 
+            text="GERAR PANORAMA", 
+            bg="#2ecc71", 
+            fg="white", 
+            font=("Arial", 10, "bold"), 
+            command=self.executar_processamento,
+            width=30
+        ).pack(pady=15)
 
-        detector_tipo, matcher_tipo = opcoes_map[opcao]
+    def selecionar_imagem(self, indice):
+        caminho = filedialog.askopenfilename(title="Escolha a imagem")
+        if caminho:
+            self.caminhos_imagens[indice] = caminho
+            nome_esq = os.path.basename(self.caminhos_imagens[0]) if self.caminhos_imagens[0] else "..."
+            nome_dir = os.path.basename(self.caminhos_imagens[1]) if self.caminhos_imagens[1] else "..."
+            self.label_status.config(text=f"Esq: {nome_esq} | Dir: {nome_dir}", fg="black")
 
-        print(f"\nProcessando panorâmica com {detector_tipo.upper()} + {matcher_tipo.upper()}...")
+    def preparar_imagem_final(self, lista_resultados):
+        largura_maxima = max(img.shape[1] for img in lista_resultados)
+        imagens_ajustadas = []
+        for img in lista_resultados:
+            pad_largura = largura_maxima - img.shape[1]
+            img_pad = np.pad(img, ((0, 0), (0, pad_largura), (0, 0)), mode='constant')
+            imagens_ajustadas.append(img_pad)
+        return np.vstack(imagens_ajustadas)
+
+    def mostrar_resultado(self, imagem_bgr, tempo_total, resumo_tempos):
+        janela_res = tk.Toplevel(self.janela)
+        janela_res.title(f"Panorama Final - {tempo_total:.4f}s")
+
+        frame_texto = tk.Frame(janela_res)
+        frame_texto.pack(pady=10)
+
+        tk.Label(
+            frame_texto, 
+            text=f"Tempo total de execução: {tempo_total:.4f}s", 
+            font=("Arial", 11, "bold")
+        ).pack()
+
+        tk.Label(
+            frame_texto, 
+            text=f"Tempos por combinação:\n{resumo_tempos}", 
+            font=("Arial", 9), 
+            fg="#555",
+            justify="left"
+        ).pack(pady=5)
+
+        imagem_rgb = cv2.cvtColor(imagem_bgr, cv2.COLOR_BGR2RGB)
+        imagem_pil = Image.fromarray(imagem_rgb)
+        imagem_pil.thumbnail((1024, 768))
         
-        panoramica, tempo = criar_panoramica(imgL, imgR, detector_tipo, matcher_tipo)
+        imagem_tk = ImageTk.PhotoImage(imagem_pil)
+        label_imagem = tk.Label(janela_res, image=imagem_tk)
+        label_imagem.image = imagem_tk
+        label_imagem.pack(padx=10, pady=10)
 
-        if panoramica is not None:
-            print(f"Sucesso! Tempo de processamento: {tempo:.4f} segundos")
+    def executar_processamento(self):
+        if not all(self.caminhos_imagens):
+            return messagebox.showerror("Erro", "Selecione ambas as imagens antes de continuar!")
+
+        inicio_cronometro = time.time()
+        img_esq = cv2.imread(self.caminhos_imagens[0])
+        img_dir = cv2.imread(self.caminhos_imagens[1])
+
+        combinacoes = [
+            ('ORB', 'BF'), ('ORB', 'FLANN'), 
+            ('SIFT', 'BF'), ('SIFT', 'FLANN')
+        ]
+        
+        resultados_validos = []
+        tempos_individuais = []
+        
+        for detector, matcher in combinacoes:
+            print(f"Tentando: {detector} + {matcher}...")
+            inicio_parcial = time.time()
             
-            titulo_janela = f"Panoramica: {detector_tipo.upper()} + {matcher_tipo.upper()}"
+            res = gerar_panorama(img_esq, img_dir, detector, matcher)
             
-            escala = 0.5
-            altura = int(panoramica.shape[0] * escala)
-            largura = int(panoramica.shape[1] * escala)
-            panoramica_redimensionada = cv2.resize(panoramica, (largura, altura))
+            tempo_parcial = time.time() - inicio_parcial
             
-            cv2.imshow(titulo_janela, panoramica_redimensionada)
-            print("Pressione qualquer tecla na janela da imagem para fechar e voltar ao menu.")
-            cv2.waitKey(0)
-            cv2.destroyAllWindows()
+            if res is not None:
+                texto = f"{detector} + {matcher} ({tempo_parcial:.4f}s)"
+                cv2.putText(res, texto, (30, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                
+                resultados_validos.append(res)
+                tempos_individuais.append((f"{detector} + {matcher}", tempo_parcial))
+                print(f" -> ok Tempo: {tempo_parcial:.4f}s")
+            else:
+                print(f" -> erro.")
+
+        if not resultados_validos:
+            return messagebox.showwarning("Não foi possível unir as imagens com nenhum dos algoritmos.")
+
+        tempo_total = time.time() - inicio_cronometro
+        
+        imagem_final = self.preparar_imagem_final(resultados_validos)
+        cv2.imwrite("resultado_panoramico.png", imagem_final)
+
+        resumo_tempos = "\n".join([f"{alg}: {t:.4f}s" for alg, t in tempos_individuais])
+        self.mostrar_resultado(imagem_final, tempo_total, resumo_tempos)
 
 if __name__ == "__main__":
-    menu_interativo()
+    root = tk.Tk()
+    root.geometry("350x300")
+    app = AppPanorama(root)
+    root.mainloop()
